@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Casino Amigos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Auth Modal -->
+  <div id="authModal" class="modal-overlay">
+    <div class="auth-container">
+      <div class="auth-logo">
+        <div class="logo-icon">♠</div>
+        <h1>Casino<span>Amigos</span></h1>
+        <p class="auth-subtitle">La mesa te espera</p>
+      </div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Entrar</button>
+        <button class="auth-tab" data-tab="register">Registrarse</button>
+      </div>
+      <form id="loginForm" class="auth-form">
+        <input type="text" id="loginUser" placeholder="Usuario" autocomplete="username" required>
+        <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="current-password" required>
+        <button type="submit" class="btn-primary">Entrar al Casino</button>
+      </form>
+      <form id="registerForm" class="auth-form hidden">
+        <input type="text" id="regUser" placeholder="Usuario (3-20 caracteres)" autocomplete="username" required>
+        <input type="password" id="regPass" placeholder="Contraseña (mín. 4 caracteres)" autocomplete="new-password" required>
+        <button type="submit" class="btn-primary">Crear Cuenta</button>
+      </form>
+      <div id="authError" class="auth-error"></div>
+    </div>
+  </div>
+
+  <!-- Main Game -->
+  <div id="gameContainer" class="hidden">
+    <!-- Header -->
+    <header class="game-header">
+      <div class="header-left">
+        <div class="logo-small">♠</div>
+        <span class="brand">Casino<span>Amigos</span></span>
+      </div>
+      <div class="header-center">
+        <div id="phaseDisplay" class="phase-display">
+          <span id="phaseText">Esperando...</span>
+          <span id="phaseTimer" class="phase-timer"></span>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="user-info">
+          <span id="username" class="username"></span>
+          <div class="balance-box">
+            <span class="balance-label">Balance</span>
+            <span id="balance" class="balance-amount">1000</span>
+          </div>
+        </div>
+        <button id="leaderboardBtn" class="btn-icon" title="Clasificación">🏆</button>
+        <button id="logoutBtn" class="btn-icon" title="Salir">⏻</button>
+      </div>
+    </header>
+
+    <!-- Roulette strip -->
+    <div class="roulette-section">
+      <div class="roulette-pointer">▼</div>
+      <div class="roulette-viewport">
+        <div id="rouletteStrip" class="roulette-strip"></div>
+      </div>
+      <div class="history-bar">
+        <span class="history-label">Últimos:</span>
+        <div id="historyNumbers" class="history-numbers"></div>
+      </div>
+    </div>
+
+    <!-- Chip selector -->
+    <div class="chip-selector">
+      <span class="chip-label">Fichas:</span>
+      <div id="chipList" class="chip-list"></div>
+      <button id="clearBetsBtn" class="btn-clear">Limpiar Apuestas</button>
+      <div class="bet-total">
+        <span>Apostado:</span>
+        <span id="totalBetDisplay">0</span>
+      </div>
+    </div>
+
+    <!-- Roulette table -->
+    <div class="table-wrapper">
+      <div id="rouletteTable" class="roulette-table"></div>
+    </div>
+
+    <!-- Payout notification -->
+    <div id="payoutNotif" class="payout-notif hidden">
+      <div class="payout-content">
+        <span id="payoutText"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard Modal -->
+  <div id="leaderboardModal" class="modal-overlay hidden">
+    <div class="leaderboard-container">
+      <div class="leaderboard-header">
+        <h2>🏆 Clasificación</h2>
+        <button id="closeLeaderboard" class="btn-close">✕</button>
+      </div>
+      <div class="leaderboard-tabs">
+        <button class="lb-tab active" data-lb="alltime">General</button>
+        <button class="lb-tab" data-lb="daily">Hoy</button>
+        <button class="lb-tab" data-lb="weekly">Semana</button>
+      </div>
+      <div id="leaderboardBody" class="leaderboard-body"></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
