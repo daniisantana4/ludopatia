@@ -106,10 +106,11 @@ let gamePhase = 'waiting';
 let phaseTimer = 3;
 let winningNumber = null;
 let lastWinningNumber = 0;
-const roundBets = new Map();
+const roundBets = new Map(); // socketId -> [{ betKey, numbers, amount }]
 const resultHistory = [];
 
 const PAYOUT_MAP = { 1: 35, 2: 17, 3: 11, 4: 8, 6: 5, 12: 2, 18: 1 };
+const BETTING_TIME = 15;
 
 function calculatePayouts() {
   dbRun('INSERT INTO rounds (winning_number) VALUES (?)', [winningNumber]);
@@ -127,10 +128,13 @@ function calculatePayouts() {
       totalBet += bet.amount;
       if (bet.numbers.includes(winningNumber)) {
         const ratio = PAYOUT_MAP[bet.numbers.length] || 0;
+        // Payout = bet back + winnings (bet was already deducted)
         totalPayout += bet.amount + bet.amount * ratio;
       }
     }
 
+    // Balance was already deducted when bets were placed.
+    // Now add back any winnings.
     const user = dbGet('SELECT balance FROM users WHERE id = ?', [userId]);
     if (user) {
       const newBalance = user.balance + totalPayout;
@@ -166,7 +170,7 @@ function gameLoop() {
     for (const [, s] of io.sockets.sockets) { if (s.data.userId) { hasAuth = true; break; } }
     if (!hasAuth) return;
     gamePhase = 'betting';
-    phaseTimer = 10;
+    phaseTimer = BETTING_TIME;
     io.emit('phase', { phase: 'betting', timer: phaseTimer });
     return;
   }
@@ -201,7 +205,7 @@ function gameLoop() {
       lastWinningNumber = winningNumber;
       roundBets.clear();
       gamePhase = 'betting';
-      phaseTimer = 10;
+      phaseTimer = BETTING_TIME;
       io.emit('phase', { phase: 'betting', timer: phaseTimer, history: resultHistory });
     } else {
       io.emit('phase', { phase: 'result', timer: phaseTimer });
@@ -288,7 +292,7 @@ io.on('connection', (socket) => {
     socket.emit('authOk', { username: session.username, balance: user?.balance || 0 });
     if (gamePhase === 'waiting') {
       gamePhase = 'betting';
-      phaseTimer = 10;
+      phaseTimer = BETTING_TIME;
       io.emit('phase', { phase: 'betting', timer: phaseTimer, history: resultHistory });
     }
   });
@@ -304,23 +308,39 @@ io.on('connection', (socket) => {
     const user = dbGet('SELECT balance FROM users WHERE id = ?', [socket.data.userId]);
     if (!user) return socket.emit('betError', 'Usuario no encontrado');
 
-    const currentBets = roundBets.get(socket.id) || [];
-    const totalBet = currentBets.reduce((s, b) => s + b.amount, 0) + amount;
-    if (totalBet > user.balance) return socket.emit('betError', 'Saldo insuficiente');
+    if (amount > user.balance) return socket.emit('betError', 'Saldo insuficiente');
 
+    // Deduct bet from balance immediately
+    const newBalance = user.balance - amount;
+    dbRun('UPDATE users SET balance = ? WHERE id = ?', [newBalance, socket.data.userId]);
+    saveDB();
+
+    const currentBets = roundBets.get(socket.id) || [];
     currentBets.push({ betKey, numbers, amount });
     roundBets.set(socket.id, currentBets);
-    socket.emit('betOk', { betKey, amount, remainingBalance: user.balance - totalBet });
+
+    socket.emit('betOk', { betKey, amount, balance: newBalance });
     io.emit('betPlaced', { username: socket.data.username, amount });
   });
 
   socket.on('clearBets', () => {
     if (gamePhase !== 'betting') return;
-    roundBets.delete(socket.id);
-    if (socket.data.userId) {
+    const bets = roundBets.get(socket.id);
+    if (bets && bets.length > 0 && socket.data.userId) {
+      // Refund all bets
+      const totalRefund = bets.reduce((s, b) => s + b.amount, 0);
+      const user = dbGet('SELECT balance FROM users WHERE id = ?', [socket.data.userId]);
+      if (user) {
+        const newBalance = user.balance + totalRefund;
+        dbRun('UPDATE users SET balance = ? WHERE id = ?', [newBalance, socket.data.userId]);
+        saveDB();
+        socket.emit('betsCleared', { balance: newBalance });
+      }
+    } else if (socket.data.userId) {
       const user = dbGet('SELECT balance FROM users WHERE id = ?', [socket.data.userId]);
       socket.emit('betsCleared', { balance: user?.balance || 0 });
     }
+    roundBets.delete(socket.id);
   });
 
   socket.on('disconnect', () => {});
