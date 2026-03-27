@@ -219,7 +219,7 @@ body {
   transition: none;
 }
 .roulette-strip.spinning {
-  transition: transform 6s cubic-bezier(0.15, 0.85, 0.25, 1);
+  /* transition managed by JS for cross-device accuracy */
 }
 .strip-num {
   flex-shrink: 0;
