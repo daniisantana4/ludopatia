@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Casino Amigos</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0a0e14; color: #e8e6e1; padding: 2rem; }
+    h1 { color: #d4a853; margin-bottom: 0.5rem; }
+    .subtitle { color: #7a8899; margin-bottom: 2rem; }
+    .login-box { max-width: 400px; margin: 4rem auto; background: #131920; padding: 2rem; border-radius: 12px; border: 1px solid #1e2a38; }
+    .login-box h2 { color: #d4a853; margin-bottom: 1rem; }
+    input, button { font-family: inherit; font-size: 1rem; }
+    input { width: 100%; padding: 0.7rem; background: #1a2230; border: 1px solid #1e2a38; border-radius: 6px; color: #e8e6e1; margin-bottom: 0.8rem; outline: none; }
+    input:focus { border-color: #d4a853; }
+    .btn { padding: 0.6rem 1.2rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+    .btn-gold { background: #d4a853; color: #000; }
+    .btn-gold:hover { background: #f0c75e; }
+    .btn-red { background: rgba(231,76,60,0.2); color: #e74c3c; border: 1px solid rgba(231,76,60,0.3); }
+    .btn-red:hover { background: rgba(231,76,60,0.35); }
+    .btn-blue { background: rgba(52,152,219,0.2); color: #3498db; border: 1px solid rgba(52,152,219,0.3); }
+    .btn-blue:hover { background: rgba(52,152,219,0.35); }
+    .btn-green { background: rgba(39,174,96,0.2); color: #27ae60; border: 1px solid rgba(39,174,96,0.3); }
+    .btn-green:hover { background: rgba(39,174,96,0.35); }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th { text-align: left; padding: 0.8rem; color: #7a8899; border-bottom: 1px solid #1e2a38; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
+    td { padding: 0.7rem 0.8rem; border-bottom: 1px solid #1e2a38; }
+    tr:hover { background: rgba(255,255,255,0.03); }
+    .balance-cell { color: #d4a853; font-weight: 600; font-family: monospace; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .balance-edit { display: flex; gap: 0.3rem; align-items: center; }
+    .balance-edit input { width: 100px; margin: 0; padding: 0.4rem; font-size: 0.9rem; }
+    .msg { padding: 0.8rem; border-radius: 6px; margin-bottom: 1rem; }
+    .msg.ok { background: rgba(39,174,96,0.15); color: #27ae60; }
+    .msg.err { background: rgba(231,76,60,0.15); color: #e74c3c; }
+    .hidden { display: none; }
+    .stats { display: flex; gap: 2rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .stat { background: #131920; padding: 1rem 1.5rem; border-radius: 8px; border: 1px solid #1e2a38; }
+    .stat-val { font-size: 1.5rem; font-weight: 700; color: #d4a853; font-family: monospace; }
+    .stat-label { font-size: 0.8rem; color: #7a8899; margin-top: 0.2rem; }
+  </style>
+</head>
+<body>
+  <div id="loginView" class="login-box">
+    <h2>🔐 Admin Panel</h2>
+    <input type="password" id="adminKey" placeholder="Clave de administrador">
+    <button class="btn btn-gold" onclick="login()" style="width:100%">Entrar</button>
+    <div id="loginMsg"></div>
+  </div>
+
+  <div id="adminView" class="hidden">
+    <h1>🎰 Panel de Administración</h1>
+    <p class="subtitle">Casino Amigos — Gestión de usuarios</p>
+    <div id="msg"></div>
+
+    <div class="stats" id="stats"></div>
+
+    <button class="btn btn-gold" onclick="loadUsers()" style="margin-bottom:1rem">🔄 Actualizar</button>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Usuario</th>
+          <th>Balance</th>
+          <th>Registrado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="userTable"></tbody>
+    </table>
+  </div>
+
+  <script>
+    let adminKey = '';
+
+    function login() {
+      adminKey = document.getElementById('adminKey').value;
+      if (!adminKey) return;
+      fetch('/api/admin/users?key=' + encodeURIComponent(adminKey))
+        .then(r => { if (!r.ok) throw new Error('Clave incorrecta'); return r.json(); })
+        .then(() => {
+          document.getElementById('loginView').classList.add('hidden');
+          document.getElementById('adminView').classList.remove('hidden');
+          loadUsers();
+        })
+        .catch(e => { document.getElementById('loginMsg').innerHTML = `<div class="msg err" style="margin-top:0.8rem">${e.message}</div>`; });
+    }
+
+    document.getElementById('adminKey').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/admin/users?key=' + encodeURIComponent(adminKey));
+        const users = await res.json();
+        const tbody = document.getElementById('userTable');
+        tbody.innerHTML = '';
+
+        const total = users.reduce((s, u) => s + u.balance, 0);
+        document.getElementById('stats').innerHTML = `
+          <div class="stat"><div class="stat-val">${users.length}</div><div class="stat-label">Jugadores</div></div>
+          <div class="stat"><div class="stat-val">${Math.floor(total).toLocaleString('es-ES')}</div><div class="stat-label">Fichas totales</div></div>
+          <div class="stat"><div class="stat-val">${users.length > 0 ? Math.floor(total/users.length).toLocaleString('es-ES') : 0}</div><div class="stat-label">Media por jugador</div></div>
+        `;
+
+        users.forEach(user => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${user.id}</td>
+            <td><strong>${user.username}</strong></td>
+            <td class="balance-cell">${Math.floor(user.balance).toLocaleString('es-ES')}</td>
+            <td>${user.created_at || '-'}</td>
+            <td>
+              <div class="actions">
+                <div class="balance-edit">
+                  <input type="number" id="bal-${user.id}" value="${Math.floor(user.balance)}" min="0">
+                  <button class="btn btn-blue" onclick="setBalance(${user.id})">Cambiar</button>
+                </div>
+                <button class="btn btn-green" onclick="resetUser(${user.id})">Reset 1000</button>
+                <button class="btn btn-red" onclick="deleteUser(${user.id}, '${user.username}')">Eliminar</button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) { showMsg('Error: ' + e.message, true); }
+    }
+
+    async function setBalance(id) {
+      const val = document.getElementById('bal-' + id).value;
+      try {
+        const res = await fetch(`/api/admin/users/${id}/balance?key=${encodeURIComponent(adminKey)}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ balance: Number(val) })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        showMsg('Balance actualizado');
+        loadUsers();
+      } catch (e) { showMsg('Error: ' + e.message, true); }
+    }
+
+    async function resetUser(id) {
+      try {
+        const res = await fetch(`/api/admin/users/${id}/reset?key=${encodeURIComponent(adminKey)}`, { method: 'POST' });
+        if (!res.ok) throw new Error((await res.json()).error);
+        showMsg('Balance reseteado a 1000');
+        loadUsers();
+      } catch (e) { showMsg('Error: ' + e.message, true); }
+    }
+
+    async function deleteUser(id, name) {
+      if (!confirm(`¿Eliminar al usuario "${name}"? Esta acción es irreversible.`)) return;
+      try {
+        const res = await fetch(`/api/admin/users/${id}?key=${encodeURIComponent(adminKey)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error((await res.json()).error);
+        showMsg(`Usuario "${name}" eliminado`);
+        loadUsers();
+      } catch (e) { showMsg('Error: ' + e.message, true); }
+    }
+
+    function showMsg(text, isError) {
+      const el = document.getElementById('msg');
+      el.innerHTML = `<div class="msg ${isError ? 'err' : 'ok'}">${text}</div>`;
+      setTimeout(() => el.innerHTML = '', 3000);
+    }
+  </script>
+</body>
+</html>
