@@ -61,7 +61,6 @@
       </div>
     </header>
 
-    <!-- Roulette strip -->
     <div class="roulette-section">
       <div class="roulette-pointer">▼</div>
       <div class="roulette-viewport">
@@ -73,7 +72,14 @@
       </div>
     </div>
 
-    <!-- Chip selector + actions -->
+    <!-- Round winners table -->
+    <div id="roundResults" class="round-results hidden">
+      <div class="round-results-inner">
+        <span class="round-results-title">Ganadores de la ronda</span>
+        <div id="roundWinnersBody"></div>
+      </div>
+    </div>
+
     <div class="chip-selector">
       <span class="chip-label">Fichas:</span>
       <div id="chipList" class="chip-list"></div>
@@ -87,16 +93,12 @@
       </div>
     </div>
 
-    <!-- Roulette table -->
     <div class="table-wrapper">
       <div id="rouletteTable" class="roulette-table"></div>
     </div>
 
-    <!-- Payout notification -->
     <div id="payoutNotif" class="payout-notif hidden">
-      <div class="payout-content">
-        <span id="payoutText"></span>
-      </div>
+      <div class="payout-content"><span id="payoutText"></span></div>
     </div>
   </div>
 
