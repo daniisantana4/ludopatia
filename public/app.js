@@ -17,7 +17,6 @@ const CHIP_COLORS = {
   100: '#212121', 500: '#7b1fa2', 1000: '#e8a500', 2500: '#d81b60'
 };
 
-// Table number layout: row 0=top(3,6,9...), row 1=mid(2,5,8...), row 2=bottom(1,4,7...)
 function tableNumber(row, col) { return (col + 1) * 3 - row; }
 function getColor(n) {
   if (n === 0) return 'green';
@@ -30,13 +29,20 @@ let socket = null;
 let selectedChip = 5;
 let balance = 0;
 let currentPhase = 'waiting';
-let placedBets = []; // { betKey, numbers, amount, chipValue }
+let placedBets = [];
 let lastWinningNumber = 0;
-const STRIP_ITEM_WIDTH = 70; // 64 + 6 gap
 
-// ── DOM Elements ─────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
+
+// ── Measure actual strip item width dynamically ──────────
+function getStripItemWidth() {
+  const firstItem = $('.strip-num');
+  if (!firstItem) return 70;
+  const style = getComputedStyle($('.roulette-strip'));
+  const gap = parseFloat(style.gap) || 6;
+  return firstItem.offsetWidth + gap;
+}
 
 // ── Auth ─────────────────────────────────────────────────
 function initAuth() {
@@ -141,7 +147,6 @@ function connectSocket() {
     } else if (data.phase === 'result') {
       if (data.number !== undefined) highlightWinner(data.number);
     } else if (data.phase === 'betting') {
-      // New round - clear bets and indicators
       if (prevPhase === 'result') {
         clearLocalBets();
         clearWinnerHighlights();
@@ -151,11 +156,18 @@ function connectSocket() {
   });
 
   socket.on('betOk', (data) => {
-    // Update local balance tracking
+    // Server confirmed bet and deducted balance
+    balance = data.balance;
+    updateBalanceDisplay();
   });
 
   socket.on('betError', (msg) => {
-    showToast(msg, 'error');
+    // Remove the last optimistic bet since server rejected it
+    if (placedBets.length > 0) {
+      placedBets.pop();
+      updateTotalBetDisplay();
+    }
+    showToast(msg);
   });
 
   socket.on('balanceUpdate', (data) => {
@@ -171,13 +183,11 @@ function connectSocket() {
   });
 }
 
-// Auto-login if token exists
 function tryAutoLogin() {
   if (!token) return;
   $('#authModal').classList.add('hidden');
   $('#gameContainer').classList.remove('hidden');
   connectSocket();
-  // The authOk/authError handlers in connectSocket will handle the rest
 }
 
 // ── UI Updates ───────────────────────────────────────────
@@ -235,7 +245,6 @@ function showPayout(payout, bet) {
 }
 
 function showToast(msg) {
-  // Simple alert-style toast
   const notif = $('#payoutNotif');
   const text = $('#payoutText');
   notif.className = 'payout-notif lose';
@@ -248,9 +257,9 @@ function showToast(msg) {
 function buildStrip(centerNumber) {
   const strip = $('#rouletteStrip');
   strip.classList.remove('spinning');
+  strip.style.transition = 'none';
   strip.innerHTML = '';
 
-  // Build a long strip: repeat the wheel sequence many times
   const repeats = 15;
   for (let r = 0; r < repeats; r++) {
     for (let i = 0; i < WHEEL_ORDER.length; i++) {
@@ -263,55 +272,78 @@ function buildStrip(centerNumber) {
     }
   }
 
-  // Center on the given number
-  const idx = WHEEL_ORDER.indexOf(centerNumber);
-  const centerIdx = Math.floor(repeats / 2) * WHEEL_ORDER.length + idx;
-  const viewportWidth = $('.roulette-viewport').offsetWidth;
-  const offset = centerIdx * STRIP_ITEM_WIDTH - viewportWidth / 2 + STRIP_ITEM_WIDTH / 2;
-  strip.style.transform = `translateX(${-offset}px)`;
+  // Wait one frame for elements to render, then measure and position
+  requestAnimationFrame(() => {
+    const itemW = getStripItemWidth();
+    const idx = WHEEL_ORDER.indexOf(centerNumber);
+    const centerIdx = Math.floor(repeats / 2) * WHEEL_ORDER.length + idx;
+    const viewportWidth = $('.roulette-viewport').offsetWidth;
+    const offset = centerIdx * itemW - viewportWidth / 2 + itemW / 2;
+    strip.style.transform = `translateX(${-offset}px)`;
+  });
 }
 
 function spinTo(targetNumber, fromNumber) {
   const strip = $('#rouletteStrip');
+
+  // Rebuild strip positioned at fromNumber
   strip.classList.remove('spinning');
+  strip.style.transition = 'none';
+  strip.innerHTML = '';
 
-  // Rebuild strip to ensure it's clean
-  buildStrip(fromNumber);
+  const repeats = 15;
+  for (let r = 0; r < repeats; r++) {
+    for (let i = 0; i < WHEEL_ORDER.length; i++) {
+      const n = WHEEL_ORDER[i];
+      const el = document.createElement('div');
+      el.className = `strip-num ${getColor(n)}`;
+      el.textContent = n;
+      el.dataset.number = n;
+      strip.appendChild(el);
+    }
+  }
 
-  // Force reflow
-  void strip.offsetHeight;
-
-  // Calculate target position - go forward several full rotations + target
-  const fromIdx = WHEEL_ORDER.indexOf(fromNumber);
-  const toIdx = WHEEL_ORDER.indexOf(targetNumber);
-  const baseCenter = Math.floor(15 / 2) * WHEEL_ORDER.length + fromIdx;
-  // Go forward 3-4 full wheel rotations from current position
-  const extraRotations = 3 * WHEEL_ORDER.length;
-  let targetCenter = baseCenter + extraRotations;
-  // Find the nearest target number after the extra rotations
-  const remainder = targetCenter % WHEEL_ORDER.length;
-  const diff = toIdx - remainder;
-  targetCenter += diff >= 0 ? diff : diff + WHEEL_ORDER.length;
-
-  const viewportWidth = $('.roulette-viewport').offsetWidth;
-  const offset = targetCenter * STRIP_ITEM_WIDTH - viewportWidth / 2 + STRIP_ITEM_WIDTH / 2;
-
-  // Add random sub-pixel offset for natural feel
-  const jitter = (Math.random() - 0.5) * 10;
-
+  // Wait for render, then measure, position, and animate
   requestAnimationFrame(() => {
-    strip.classList.add('spinning');
-    strip.style.transform = `translateX(${-(offset + jitter)}px)`;
+    const itemW = getStripItemWidth();
+    const viewportWidth = $('.roulette-viewport').offsetWidth;
+
+    const fromIdx = WHEEL_ORDER.indexOf(fromNumber);
+    const toIdx = WHEEL_ORDER.indexOf(targetNumber);
+    const halfRepeat = Math.floor(repeats / 2);
+
+    // Position at fromNumber
+    const startCenter = halfRepeat * WHEEL_ORDER.length + fromIdx;
+    const startOffset = startCenter * itemW - viewportWidth / 2 + itemW / 2;
+    strip.style.transform = `translateX(${-startOffset}px)`;
+
+    // Force layout so the start position takes effect
+    void strip.offsetHeight;
+
+    // Calculate target: go 3 full rotations forward, then to target
+    const extraRotations = 3 * WHEEL_ORDER.length;
+    let targetCenter = startCenter + extraRotations;
+    const remainder = targetCenter % WHEEL_ORDER.length;
+    const diff = toIdx - remainder;
+    targetCenter += diff >= 0 ? diff : diff + WHEEL_ORDER.length;
+
+    const targetOffset = targetCenter * itemW - viewportWidth / 2 + itemW / 2;
+    const jitter = (Math.random() - 0.5) * 10;
+
+    // Now animate
+    requestAnimationFrame(() => {
+      strip.style.transition = 'transform 6s cubic-bezier(0.15, 0.85, 0.25, 1)';
+      strip.classList.add('spinning');
+      strip.style.transform = `translateX(${-(targetOffset + jitter)}px)`;
+    });
   });
 
-  // Update lastWinningNumber after animation
   setTimeout(() => {
     lastWinningNumber = targetNumber;
   }, 6200);
 }
 
 function highlightWinner(number) {
-  // Highlight on the table
   $$('.table-cell').forEach(cell => {
     cell.classList.remove('winner-cell');
     if (cell.dataset.numbers) {
@@ -321,14 +353,7 @@ function highlightWinner(number) {
       }
     }
   });
-
-  // Highlight on strip
   $$('.strip-num').forEach(el => el.classList.remove('winner'));
-  // Find center strip num and highlight it
-  const strip = $('#rouletteStrip');
-  const viewportWidth = $('.roulette-viewport').offsetWidth;
-  const currentOffset = -parseFloat(strip.style.transform.replace(/[^-\d.]/g, '')) || 0;
-  // Just highlight all instances of the winning number (they'll mostly be off screen)
   $$(`.strip-num[data-number="${number}"]`).forEach(el => el.classList.add('winner'));
 }
 
@@ -393,8 +418,6 @@ function buildTable() {
       cell.style.gridColumn = String(col + 2);
       cell.dataset.row = row;
       cell.dataset.col = col;
-
-      // Smart click handler for splits and corners
       cell.addEventListener('click', (e) => handleNumberClick(e, cell, row, col, num));
       table.appendChild(cell);
     }
@@ -436,26 +459,20 @@ function buildTable() {
     const bet = outsideBets[i];
     const cell = createCell(bet.nums, bet.label, `outside outside-bottom ${bet.cls || ''}`);
     cell.style.gridRow = '5';
-    // Span 2 columns each across 12 number columns
     const startCol = i * 2 + 2;
     cell.style.gridColumn = `${startCol} / ${startCol + 2}`;
     table.appendChild(cell);
   }
 
-  // Make the zero-column row 4 and row 5 fill with empty space
-  const emptyR4 = document.createElement('div');
-  emptyR4.style.gridRow = '4'; emptyR4.style.gridColumn = '1';
-  table.appendChild(emptyR4);
-  const emptyR5 = document.createElement('div');
-  emptyR5.style.gridRow = '5'; emptyR5.style.gridColumn = '1';
-  table.appendChild(emptyR5);
-  // Column row 4-5
-  const emptyC4 = document.createElement('div');
-  emptyC4.style.gridRow = '4'; emptyC4.style.gridColumn = '14';
-  table.appendChild(emptyC4);
-  const emptyC5 = document.createElement('div');
-  emptyC5.style.gridRow = '5'; emptyC5.style.gridColumn = '14';
-  table.appendChild(emptyC5);
+  // Empty fillers
+  for (const r of ['4','5']) {
+    for (const c of ['1','14']) {
+      const empty = document.createElement('div');
+      empty.style.gridRow = r;
+      empty.style.gridColumn = c;
+      table.appendChild(empty);
+    }
+  }
 }
 
 function createCell(numbers, label, extraClass) {
@@ -464,8 +481,8 @@ function createCell(numbers, label, extraClass) {
   cell.textContent = label;
   cell.dataset.numbers = JSON.stringify(numbers);
   cell.addEventListener('click', (e) => {
+    // Only handle for outside bets and zero (cells without row data)
     if (!cell.dataset.row) {
-      // Outside bet or zero - place directly
       placeBet(numbers, cell);
     }
   });
@@ -478,12 +495,15 @@ function handleNumberClick(e, cell, row, col, num) {
   const y = e.clientY - rect.top;
   const w = rect.width;
   const h = rect.height;
-  const edge = 10; // Edge detection threshold
 
-  const nearTop = y < edge && row > 0;
-  const nearBottom = y > h - edge && row < 2;
-  const nearLeft = x < edge && col > 0;
-  const nearRight = x > w - edge && col < 11;
+  // Use 28% of cell dimensions as edge zone - works on any screen size
+  const edgeX = w * 0.28;
+  const edgeY = h * 0.28;
+
+  const nearTop = y < edgeY && row > 0;
+  const nearBottom = y > h - edgeY && row < 2;
+  const nearLeft = x < edgeX && col > 0;
+  const nearRight = x > w - edgeX && col < 11;
 
   // Corner bets (4 numbers)
   if (nearTop && nearLeft) {
@@ -529,7 +549,7 @@ function handleNumberClick(e, cell, row, col, num) {
     return;
   }
 
-  // Straight bet
+  // Straight bet (center click)
   placeBet([num], cell, 'straight');
 }
 
@@ -541,31 +561,25 @@ function placeBet(numbers, cell, betType) {
   if (!socket || !token) return;
 
   const amount = selectedChip;
-  if (getTotalBet() + amount > balance) {
+  if (amount > balance) {
     showToast('Saldo insuficiente');
     return;
   }
 
   const betKey = numbers.sort((a,b) => a-b).join(',');
-
   socket.emit('placeBet', { betKey, numbers, amount });
 
-  // Optimistic update
+  // Optimistic local update
   placedBets.push({ betKey, numbers, amount, chipValue: selectedChip });
+  balance -= amount;
+  updateBalanceDisplay();
   updateTotalBetDisplay();
   renderBetIndicator(cell, amount, betType);
 }
 
 function renderBetIndicator(cell, amount, betType) {
-  const indicator = document.createElement('div');
-  indicator.className = 'bet-indicator';
-  indicator.style.background = CHIP_COLORS[selectedChip] || '#888';
-  if (selectedChip === 1 || selectedChip === 1000) indicator.style.color = '#333';
-
-  // Format amount
   const existing = cell.querySelector('.bet-indicator');
   if (existing) {
-    // Stack on existing
     const currentAmt = parseInt(existing.dataset.totalAmount || '0');
     const newAmt = currentAmt + amount;
     existing.dataset.totalAmount = newAmt;
@@ -573,10 +587,12 @@ function renderBetIndicator(cell, amount, betType) {
     return;
   }
 
+  const indicator = document.createElement('div');
+  indicator.className = 'bet-indicator';
+  indicator.style.background = CHIP_COLORS[selectedChip] || '#888';
+  if (selectedChip === 1 || selectedChip === 1000) indicator.style.color = '#333';
   indicator.textContent = amount >= 1000 ? Math.floor(amount/1000) + 'K' : amount;
   indicator.dataset.totalAmount = amount;
-
-  // Position based on bet type
   indicator.style.top = '50%';
   indicator.style.left = '50%';
   indicator.style.transform = 'translate(-50%, -50%)';
