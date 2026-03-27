@@ -37,7 +37,6 @@
 
   <!-- Main Game -->
   <div id="gameContainer" class="hidden">
-    <!-- Header -->
     <header class="game-header">
       <div class="header-left">
         <div class="logo-small">♠</div>
@@ -74,11 +73,14 @@
       </div>
     </div>
 
-    <!-- Chip selector -->
+    <!-- Chip selector + actions -->
     <div class="chip-selector">
       <span class="chip-label">Fichas:</span>
       <div id="chipList" class="chip-list"></div>
-      <button id="clearBetsBtn" class="btn-clear">Limpiar Apuestas</button>
+      <div class="bet-actions">
+        <button id="repeatBetBtn" class="btn-repeat" title="Repetir última apuesta">🔁 Repetir</button>
+        <button id="clearBetsBtn" class="btn-clear">✕ Limpiar</button>
+      </div>
       <div class="bet-total">
         <span>Apostado:</span>
         <span id="totalBetDisplay">0</span>
